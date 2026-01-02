@@ -1,0 +1,11 @@
+/home/syy/CGAL-6.1/build/CMakeFiles/install_FindCGAL.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/ALL_CGAL_TARGETS.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/examples.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/demos.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/benchmarks.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/edit_cache.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/rebuild_cache.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/list_install_components.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/install.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/install/local.dir
+/home/syy/CGAL-6.1/build/CMakeFiles/install/strip.dir

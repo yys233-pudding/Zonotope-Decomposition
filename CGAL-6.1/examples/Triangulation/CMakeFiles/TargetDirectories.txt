@@ -1,0 +1,11 @@
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/barycentric_subdivision.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/ALL_CGAL_TARGETS.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/cgal_check_build_system.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/delaunay_triangulation.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/convex_hull.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/regular_triangulation.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/triangulation.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/triangulation_data_structure_dynamic.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/triangulation_data_structure_static.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/edit_cache.dir
+/home/syy/CGAL-6.1/examples/Triangulation/CMakeFiles/rebuild_cache.dir
