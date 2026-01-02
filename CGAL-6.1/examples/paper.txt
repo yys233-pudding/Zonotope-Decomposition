@@ -1,0 +1,1307 @@
+Informed Hybrid Zonotope-based Motion Planning Algorithm
+
+arXiv:2507.09309v2 [cs.RO] 19 Jul 2025
+
+Peng Xie, Johannes Betz, Amr Alanwar
+
+Abstract— Optimal path planning in nonconvex free spaces
+is notoriously challenging, as formulating such problems as
+mixed-integer linear programs (MILPs) is NP-hard. We propose
+HZ-MP, an informed Hybrid Zonotope–based Motion Planner,
+as an alternative approach that decomposes the obstacle-free
+space and performs low-dimensional face sampling guided by
+an ellipsotope heuristic, enabling focused exploration along
+promising transit regions. This structured exploration eliminates the excessive, unreachable sampling that degrades existing
+informed planners such as AIT* and EIT* in narrow gaps or
+boxed-goal scenarios. We prove that HZ-MP is probabilistically
+complete and asymptotically optimal. It converges to nearoptimal trajectories in finite time and scales to high-dimensional
+cluttered scenes.
+
+I. I NTRODUCTION
+Motion planning in robotics requires finding collisionfree paths through complex environments. Optimizationbased methods formulate this as a mixed-integer program
+(MIP) to encode obstacle avoidance, but solving these programs is NP-hard and generally intractable for real-time
+use [1]. This allows for optimal trajectory generation under
+dynamic and kinematic constraints, but at a steep computational cost: solving the resulting mixed-integer linear or
+quadratic programs is NP-hard and generally intractable for
+real-time use on embedded hardware [1]. Recent advances
+have aimed to mitigate this complexity. For example, the
+hybrid zonotope representation of obstacle-free space has
+been introduced to compactly model nonconvex regions with
+a combination of continuous and binary variables [2]. By
+using hybrid zonotopes to encode obstacles within an MPC,
+one can tighten convex relaxations and exploit problem
+structure, yielding order-of-magnitude speed-ups in mixedinteger solver performance[3]. To address these computational challenges, recent works have developed multi-stage
+Mixed-Integer Quadratic Programming (MIQP) methods that
+replace direct non-convex computations with structured decompositions. These approaches employ custom Branchand-Bound algorithms integrated with Interior-Point solvers,
+achieving significant speedups in the optimization process
+[3]. However, MIQP methods still face fundamental limitations in complex scenarios. Consider a vehicle that must
+optimize not only position and velocity but also acceleration,
+jerk, and load distribution—resulting in state spaces with
+Peng Xie and Amr Alanwar are with the TUM School of Computation, Information and Technology, Department of Computer Engineering,
+Technical University of Munich, 74076 Heilbronn, Germany. (e-mail:
+p.xie@tum.de, alanwar@tum.de)
+Johannes Betz is with the TUM School of Engineering and Design, Department of Mobility Systems Engineering, Technical University of Munich,
+85748 Garching, Germany. (e-mail: johannes.betz@tum.de)
+
+dozens of dimensions. In such high-dimensional settings,
+MIQP suffers from the curse of dimensionality: exponentially growing integer variables, massive constraint matrices, and dramatically increased solution times. Furthermore,
+the Branch-and-Bound algorithm provides little predictability—it may find solutions quickly or require exploring exponentially many branches, making it unsuitable for real-time
+guarantees[4]. These inherent limitations of optimizationbased approaches motivate exploring alternative paradigms
+for efficient motion planning
+Another class of motion planners relies on random sampling to explore the state space. Early algorithms such
+as the probabilistic roadmap (PRM) and rapidly-exploring
+random tree (RRT) families are probabilistically complete
+but not optimal by design [5], [6]. The informed variants
+bias samples toward cost-bounded ellipsoidal subsets to accelerate convergence; e.g. Informed RRT* already improves
+on uniform RRT* [7]. Notably, adaptively informed trees
+and effort informed trees employ an asymmetric bidirectional
+search where two growing trees continuously guide each
+other using updated cost-to-go estimates [8]. However, their
+stochastic exploration can stall in narrow-gap or doubleenclosure scenarios where most samples fall in unreachable
+regions, slowing convergence to the global optimum.[8]
+We propose HZ-MP (informed Hybrid Zonotope-based
+Motion Planner), which synergizes optimization-based and
+sampling-based planning through four key steps illustrated
+in Fig. 1:
+(a)→(b) Space decomposition: We represent the obstaclefree space with hybrid zonotopes—finite collections of convex leaves with discrete transitions, transforming the complex non-convex environment into a structured representation
+amenable to systematic exploration.
+(b)→(c) Path identification: We compute adjacency relationships between leaves and identify all possible connected
+paths. Our approach samples on (n − 1)-dimensional shared
+faces rather than n-dimensional volumes and performs parallel computation across all potential paths simultaneously
+to obtain the optimal solutions. In Fig. 1(c), three different
+colored paths represent possible routes, with the brown path
+identified as currently optimal.
+(c)→(d) Ellipsotope construction: Using the current optimal path cost, we construct an ellipsotope reachable set that
+bounds all states potentially leading to improved solutions,
+as shown in Fig. 1(d).
+(d)→(e) Reachable set refinement: We prune search regions using ellipsotope-based reachability bounds to update
+the feasible space, creating a refined reachable set for subsequent planning iterations, demonstrated in Fig. 1(e).
+
+intersection
+
+(a)
+
+(b)
+
+(e)
+
+(d)
+
+(c)
+
+reachable set update
+Fig. 1: Overview of HZ-MP process illustration. (a) Original environment with obstacles (black), start (green), and goal (red).
+(b) Hybrid zonotope representation of obstacle-free space decomposed into convex leaves. (c) Three possible connected paths
+identified through adjacency computation, with the brown path being the shortest. (d) Ellipsotope reachable set constructed
+based on the optimal path cost from (c). (e) Updated reachable set after pruning using ellipsotope-based bounds, which
+refines the feasible space for subsequent planning iterations.
+
+This iterative process enables HZ-MP to efficiently balance global optimality with computational efficiency by
+systematically reducing the search space while maintaining
+solution completeness.
+By combining these techniques, HZ-MP effectively balances the global optimality of MPC-based methods with the
+adaptivity and speed of informed sampling. The proposed
+planner is probabilistically complete and asymptotically optimal, while exhibiting significant practical speed-ups over existing approaches. Our method brings motion planning closer
+to achieving the high solution quality of optimization-based
+methods while operating within the strict timing constraints
+of real-time applications.
+The remainder of this paper is organized as follows.
+Section II introduces mathematical preliminaries on hybrid
+zonotopes and ellipsotopes. Section III presents the HZMP algorithm with theoretical guarantees. Section IV IV
+demonstrates the algorithm’s effectiveness through numerical examples. Section V V concludes with future research
+directions.
+II. N OTATIONS AND PRELIMINARIES
+This section introduces the mathematical foundations necessary and notations for our hybrid zonotope-based motion
+planning algorithm.
+A. Notations
+Matrices are denoted by uppercase letters, e.g., G ∈
+Rn×ng , and sets by uppercase calligraphic letters, e.g.,
+Z ⊂ Rn . Vectors and scalars are denoted by lowercase
+letters, e.g., b ∈ Rnc . The n-dimensional unit hypercube
+n
+is denoted by B∞
+= {x ∈ Rn | ∥x∥∞ ≤ 1}. The set of all
+n-dimensional binary vectors is denoted by {−1, 1}n . The
+cardinality of the discrete set T is denoted by |T |, e.g.,
+|T | = 8 for T = {−1, 1}3 . The concatenation of two
+column vectors into a single column vector is denoted by
+(ξ1 ξ2 ) = [ξ1T ξ2T ]T . The bold 1 and 0 denote matrices
+of all 1 and 0 elements, respectively, and I denotes the
+
+identity matrix with dimensions indicated by subscripts when
+not easily deduced from context. Given the sets Z, W ⊂
+Rn , Y ⊂ Rm , and matrix R ∈ Rm×n , the linear mapping
+of Z by R is RZ = {Rz | z ∈ Z}, the Minkowski
+sum of Z and W is Z ⊕ W = {z + w | z ∈ Z, w ∈
+W}, the generalized intersection of Z and Y under R is
+Z ∩R Y = {z ∈ Z | Rz ∈ Y}, and the union of Z and W
+is Z ∪ W = {x ∈ Rn | x ∈ Z ∨ x ∈ W}.
+B. Hybrid zonotope
+Hybrid zonotopes provide a powerful representation for
+nonconvex sets by combining continuous and binary factors.
+Each combination of binary factors defines a constrained
+zonotope, which we call a leaf of the hybrid zonotope.
+Understanding the adjacency relationships between these
+leaves is crucial for applications such as motion planning
+and reachability analysis. We start by defining the hybrid
+zonotope set representation.
+Definition II.1 ([2]). The set Zh ⊂ Rn is a hybrid zonotope
+if there exist Gc ∈ Rn×ng , Gb ∈ Rn×nb , c ∈ Rn , Ac ∈
+Rnc ×ng , Ab ∈ Rnc ×nb , and b ∈ Rnc such that
+
+
+h ci
+ng
+ξ
+nb 
+
+h ci
+,
+∈
+B
+×
+{−1,
+1}
+
+b
+∞
+ξ
+Zh =
+Gc Gb ξb + c ξ 
+.
+ h ξc i
+
+
+=b
+Ac Ab
+b
+ξ
+
+(1)
+Central to our approach is the decomposition of complex
+obstacle-free environments into manageable convex regions,
+each represented as a leaf of a hybrid zonotope.
+Example 1. We can represent the map with obstacles shown
+in Figure 2 using a hybrid zonotope. Consider the blue region
+with an obstacle (white area) in the center. This non-convex
+feasible space is captured by:
+HZ = ⟨Gc , Gb , c, Ac , Ab , b⟩
+T
+
+2
+
+(2)
+2×28
+
+where c = [−41.25, 2.5] ∈ R is the center, Gc ∈ R
+contains the continuous generators, and Gb = O2×4 (indicat-
+
+ing all binary modes share the same center). The constraint
+matrices Ac ∈ R16×28 , Ab ∈ R16×4 , and b ∈ R16 encode
+the logical constraints that exclude the obstacle region.
+
+Definition II.3 (Ellipsoids and Ellipsotopes [9]). An ellipsoid is the set
+
+E(c, Q) = x ∈ Rn | (x − c)⊤ Q(x − c) ≤ 1 , (4)
+
+0
+
+where c ∈ Rn is the center and Q ≻ 0 is a positive
+definite shape matrix. Generalizing the ellipsoid concept, an
+ellipsotope is a set
+
+Ep (c, G, A, b, I) = c + Gξ | ∥ξJ ∥p ≤ 1 ∀ J ∈ I
+(5)
+and Aξ = b ⊂ Rn ,
+
+-5
+
+where c ∈ Rn , G ∈ Rn×ng , A ∈ Rnc ×ng , b ∈ Rnc , and I is
+a valid index set.
+
+10
+hybrid zonotope
+
+5
+
+III. I NFORMED HYBRID ZONOTOPE - BASED MOTION
+-10
+-20
+
+-15
+
+-10
+
+-5
+
+0
+
+5
+
+Fig. 2: A hybrid zonotope representation of a non-convex
+feasible region with an obstacle (white area).
+C. Informed sampling
+The optimal path planning problem seeks to find a valid
+path σ ∗ from a start state xstart to a goal region Xgoal that
+minimizes a cost function c(σ) [6]. Sampling-based planning
+algorithms are considered almost-surely asymptotically optimal if, as the number of samples approaches infinity, they
+find a solution whose cost converges to the optimal cost with
+probability 1.
+Informed sampling techniques enhance the performance of
+these algorithms by focusing the sampling process on regions
+more likely to contain high-quality solutions. Informed RRT*
+[7] exemplifies this approach by restricting sampling to an
+ellipsoidal subset of the state space once an initial solution
+is found. This informed subset, defined as
+Xinformed = {x ∈ X | ∥xstart − x∥ + ∥x − xgoal ∥ ≤ cbest }, (3)
+contains all states that could potentially improve the current
+best solution with cost cbest .
+A significant theoretical advantage of informed sampling
+is its convergence rate:
+Theorem II.2 ([7]). With uniform sampling of the informed
+subset, x ∼ Uniform(Xinformed ), the cost of the best solution,
+cbest , converges linearly to the theoretical minimum, cmin , in
+the absence of obstacles.
+This linear convergence rate offers substantial improvements over the sublinear convergence of uniform sampling
+across the entire state space. Recent advances in bidirectional
+informed sampling techniques [8] further build upon this
+foundation to achieve even more efficient path planning.
+D. Ellipsoids and ellipsotopes
+To represent the informed region described above, we
+employ ellipsotopes, which generalize ellipsoids and provide
+an efficient framework for capturing feasible subsets of the
+state space.
+
+PLANNING WITH SPACE DECOMPOSITION
+
+A. Problem Formulation and Overview
+Consider the optimal motion planning problem: Given a
+start state xstart ∈ Xfree and goal state xgoal ∈ Xfree , find
+a continuous collision-free path σ : [0, 1] → Xfree that
+minimizes a cost function:
+σ ∗ = arg min c(σ),
+σ
+
+s.t.
+
+σ(0) = xstart , σ(1) = xgoal (6)
+
+Our HZ-MP approach addresses this problem through the
+systematic process illustrated in Figure 1. The algorithm
+transforms the complex non-convex planning problem into
+a structured exploration of convex regions, enabling efficient
+path optimization while maintaining completeness guarantees. We now detail each component of this process.
+B. Free space decomposition via hybrid zonotopes
+The first step in our approach, illustrated in Figure 1(a)-(b),
+transforms the obstacle-laden environment into a structured
+representation amenable to efficient exploration. Given a
+state space X ⊂ Rn with obstacles Xobs , we decompose
+the free space Xfree = X \ Xobs into hybrid zonotopes.
+• Nef polyhedron representation: We employ CGAL’s Nef
+polyhedron framework to compute Xfree = X \ Xobs
+through exact Boolean operations. This approach guarantees topologically consistent results even for complex
+non-manifold geometries with holes or narrow passages,
+while preserving the face-edge incidence relationships
+essential for adjacency computation [10].
+• Convex decomposition: The resulting Nef polyhedron is
+partitioned into convex
+Sm components {C1 , C2 , . . . , Cm }
+such that Xfree = i=1 Ci , yielding a finite collection of
+convex regions suitable for hybrid zonotope construction [11].
+The resulting decomposition is represented by a vertex
+matrix V = [v1 , . . . , vnv ] ∈ Rn×nv containing all vertices of the convex components, and an incidence matrix
+M ∈ Rnv ×nF [12]. From this V-representation, we construct
+a hybrid zonotope using the methodology in [13], which
+enables efficient conversion from V-rep polytopes to a unified
+hybrid zonotope. This transformation preserves the topology
+of the free space while providing a representation amenable
+to sampling-based motion planning algorithms.
+
+The hybrid zonotope representation provides a finite collection of convex regions L = {Z1 , . . . , Zm }, transforming
+the continuous planning problem into a discrete graph search
+augmented with continuous optimization within each region.
+To leverage this structure, we next establish connectivity
+relationships between these regions.
+
+(a) Intersection criterion. Zc,i ∩ Zc,j ̸= ∅ if and only if the
+following system is feasible:
+M ∆ξ c = N ∆ξ b
+
+(11a)
+
+c c
+
+A ξ = ri
+
+(11b)
+
+c
+
+−1 ≤ ξ ≤ 1
+
+(11c)
+
+c
+
+c
+
+(11d)
+
+−1 ≤ ξ + ∆ξ ≤ 1
+
+C. Adjacency computation and path identification
+Having decomposed the free space into convex leaves
+as shown in Figure 1(b), we must establish connectivity
+relationships to identify feasible paths. This adjacency information, visualized in Figure 1(c) forms the foundation for
+our dimension-reduced sampling strategy.
+When representing obstacle-free environments using hybrid zonotopes, the complex non-convex space decomposes
+into simpler convex regions called ”leaves,” each corresponding to a specific configuration of binary variables. The
+critical insight for path planning is identifying which regions
+are adjacent—sharing boundaries where paths can transition
+smoothly between them. This adjacency information creates a structured roadmap for navigation, enabling focused
+sampling on region boundaries rather than uniform space
+exploration and guaranteeing collision-free paths within each
+convex region.
+Remark III.1. Given a hybrid zonotope Zh
+=
+⟨Gc , Gb , c, Ac , Ab , b⟩ as defined in Definition II.1, we
+can decompose it into a collection of constrained zonotopes
+and establish their connectivity through the following:
+(i) Based on [2, Theorem 5], let ξib be an entry of the
+discrete set {−1, 1}nb containing 2nb elements. The
+feasible entries L is defined as:
+
+(b) Linear consistency shortcut. Let L = (I − M M † )N
+where M † is the Moore–Penrose pseudoinverse of M . Then
+∃∆ξ c : M ∆ξ c = N ∆ξ b ⇐⇒ L∆ξ b = 0
+
+(12)
+
+(c) Tangent vs. overlap characterization. Let F denote the set
+of all solutions to (11), and define the strict interior feasible
+region:
+F ◦ = {(ξ c , ∆ξ c ) ∈ F | |ξkc | < 1, |ξkc + ∆ξkc | < 1; ∀k}
+(13)
+Then:
+Tangent contact (boundary-only) ⇐⇒ F ̸= ∅ and F ◦ = ∅
+(14)
+Interior overlap ⇐⇒ F ◦ ̸= ∅
+
+(15)
+
+Interior overlap implies the intersection contains points in
+the interior of both leaves, yielding non-zero volume. Tangent
+contact implies the intersection is confined to boundaries,
+forming a lower-dimensional face.
+(d) Adjacency computation. For any pair of leaves, the
+adjacency can be determined by:
+(
+1 if L(ξjb − ξib ) = 0 and system (11) is feasible
+Aij =
+0 otherwise
+(16)
+
+ng
+s.t. Ac ξ c +Ab ξib = b}
+L = {ξib ∈ {−1, 1}nb | ∃ξ c ∈ B∞
+(a) (⇒) Let z ∈ Zc,i ∩ Zc,j . Then there exist ξic , ξjc ∈
+(7) Proof.
+ng
+(ii) For each ξib ∈ L, the corresponding constrained zono- B∞ = ξ | |ξ|∞ ≤ 1 such that:
+tope is defined as:
+Gc ξ c + c + Gb ξ b = z
+(17)
+i
+
+Zc,i = ⟨Gc , c + Gb ξib , Ac , b − Ab ξib ⟩
+
+(8)
+
+(iii) An indexing function ID : L → {1, 2, . . . , |L|} assigns
+a unique integer to each leaf, allowing us to define the
+adjacency matrix A ∈ {0, 1}|L|×|L| as:
+(
+1 if Zc,i ∩ Zc,j ̸= ∅
+Aij =
+(9)
+0 otherwise
+where i = ID(ξib ) and j = ID(ξjb ) for ξib , ξjb ∈ L.
+This decomposition and adjacency structure provide a
+complete topological representation of the hybrid zonotope
+that can be systematically explored for motion planning
+applications.
+Proposition III.2. Let Zh = ⟨Gc , Gb , c, Ac , Ab , b⟩ be a
+hybrid zonotope with leaves Zc,i , Zc,j from (8). Define,
+ c
+ b
+G
+G
+M=
+,
+N
+=
+, ξ c = ξic ,
+Ac
+Ab
+(10)
+∆ξ c = ξjc − ξic , ∆ξ b = ξjb − ξib , ri = b − Ab ξib .
+
+i
+
+Gc ξjc + c + Gb ξjb = z
+
+(18)
+
+Ac ξic + Ab ξib = b
+Ac ξjc + Ab ξjb = b
+
+(19)
+(20)
+
+Setting ∆ξ c = ξjc − ξic and subtracting yields:
+Gc ∆ξ c = Gb (ξjb − ξib ) = Gb ∆ξ b
+c
+
+A ∆ξ
+
+c
+
+(21)
+
+b
+
+= A (ξjb − ξib ) = Ab ∆ξ b
+
+(22)
+
+Combined, this gives M ∆ξ c = N ∆ξ b . Let ξ c = ξic . Then
+we have:
+Ac ξ c = Ac ξic = b − Ab ξib = ri
+
+(23)
+
+c
+
+|ξ |∞ = |ξic |∞ ≤ 1
+|ξ c + ∆ξ c |∞ = |ξic + (ξjc − ξic )|∞ = |ξjc |∞ ≤ 1
+c
+
+c
+
+(24)
+(25)
+
+c
+
+Thus, (ξ , ∆ξ ) satisfies system (11). (⇐) Given ξ and ∆ξ c
+satisfying (11), define:
+ξic = ξ c
+
+(26)
+
+ξjc = ξ c − ∆ξ c
+
+(27)
+
+n
+
+From (11c) and (11d), we have ξic , ξjc ∈ B∞g . From (11b),
+Ac ξic = ri = b − Ab ξib , thus Ac ξic + Ab ξib = b. From (11a),
+M ∆ξ c = N ∆ξ b implies:
+Ac (ξic − ξjc ) = Ab (ξjb − ξib )
+
+(28)
+
+⇒ Ac ξjc + Ab ξjb = Ac ξic + Ab ξib = b
+
+(29)
+
+Define z = Gc ξic + c + Gb ξib . Similarly, from (11a):
+Gc (ξic − ξjc ) = Gb (ξjb − ξib )
+
+(30)
+
+⇒ Gc ξjc + Gb ξjb = Gc ξic + Gb ξib
+
+(31)
+
+Thus, z = Gc ξjc + c + Gb ξjb ∈ Zc,i ∩ Zc,j .
+(b) N ∆ξ b lies in im M if and only if its projection
+onto im M ⊥ is zero; this projection is precisely
+(I − M M † )N ∆ξ b = L∆ξ b .
+(c) F ◦ ̸= ∅ means there exists a solution strictly inside
+both boxes, implying the intersection contains interior points
+with non-zero volume. When all feasible solutions touch at
+least one box face (| · | = 1), the intersection consists only
+of boundary points or lower-dimensional faces, resulting in
+tangent contact.
+(d) Adjacency requires both linear consistency (L∆ξ b =
+0) and feasibility of system (11), which together ensure a
+non-empty intersection between leaves.
+Corollary III.3. To distinguish between interior overlap and
+boundary contact of leaves Zc,i and Zc,j , introduce a slack
+variable δ ≥ 0 that tightens the box constraints in (11):
+(11a)
+
+(32a)
+
+(11b)
+
+(32b)
+
+−1 + δ ≤ ξ c ≤ 1 − δ
+
+(32c)
+
+c
+
+c
+
+−1 + δ ≤ ξ + ∆ξ ≤ 1 − δ
+
+(32d)
+
+Consider the linear program
+⋆
+
+δ = cmaxc ; δ
+ξ ,∆ξ ,δ
+
+s.t. (32)
+
+(33)
+
+Then:
+⋆
+• δ > 0 ⇐⇒ interior overlap (intersection contains
+interior points)
+⋆
+• δ = 0 ⇐⇒ boundary contact (intersection confined
+to boundaries)
+Intuitively, δ ⋆ quantifies the maximal uniform contraction of
+the box constraints that preserves feasibility.
+Corollary III.4. For any two adjacent leaf nodes Zc,i and
+Zc,j with Aij = 1, their shared face can be computed as
+a generalized intersection of constrained zonotopes [14].
+Given Zc,i = ⟨Gc , c + Gb ξib , Ac , b − Ab ξib ⟩ and Zc,j =
+⟨Gc , c + Gb ξjb , Ac , b − Ab ξjb ⟩, their shared face is:
+
+Fij = Zc,i ∩I Zc,j = [Gc 0] , c + Gb ξib ,
+ c
+ 
+
+b − Ab ξib
+A
+0
+
+(34)
+ 0
+Ac  ,  b − Ab ξjb 
+
+Gc −Gc
+Gb (ξjb − ξib )
+
+Fig. 3: Hybrid zonotope with four leaf nodes (1-4) and their
+adjacency.
+
+where I is the identity matrix.
+Furthermore, the shared face Fij is a constrained zonotope of dimension at most (n − 1) with non-zero (n − 1)dimensional Hausdorff measure. This follows from the fact
+that the constraint Gc ξ = Gb (ξjb − ξib ) imposes at least one
+linear constraint on ξ, reducing the dimension by at least
+1. Since ξib ̸= ξjb for adjacent leaves (they are distinct),
+the constraint is non-trivial and Fij has positive (n − 1)dimensional measure.
+This computation of shared faces is based on the generalized intersection operation for constrained zonotopes as
+established in [14]. The dimension reduction property is
+critical for our sampling-based motion planning approach:
+by focusing samples on these (n − 1)-dimensional shared
+faces rather than n-dimensional volumes, we effectively
+reduce the dimensionality of the search space while ensuring
+connectivity between adjacent regions of the free space.
+Example 2. Consider a hybrid zonotope Zh
+=
+⟨Gc , Gb , c, Ac , Ab , b⟩ in R3 that decomposes a workspace
+into four distinct leaf nodes representing convex regions of
+the free space. Figure 3 shows the geometric representation
+of these leaf nodes.
+The adjacency matrix A for this configuration is:
+ID
+1
+A= 2
+3
+4
+
+1
+0
+0
+0
+1
+
+2
+0
+0
+1
+0
+
+3
+0
+1
+0
+1
+
+4
+1
+0
+1
+0
+
+(35)
+
+This adjacency matrix indicates that leaf node 1 is adjacent
+to leaf node 4, leaf node 4 is adjacent to leaf node 3, and leaf
+node 2 is adjacent to leaf node 3, the only possible route is
+1 → 4 → 3 → 2. For any pair of adjacent leaf nodes, we can
+compute their shared face using Corollary III.4. For example,
+the shared face between leaf nodes 1 and 4 is obtained by:
+F1,4 = Zc,1 ∩I Zc,4
+
+(36)
+
+Our algorithm generates samples on the shared faces
+
+14
+
+F1,4 , F4,3 , and F3,2 to optimize the path through these
+waypoints, achieving dimension reduction by sampling on
+lower-dimensional interfaces rather than the full 3D space.
+
+15
+12
+
+10
+
+The adjacency matrix A and shared face computations
+from III.4 provide the topological foundation for our planning algorithm. We now present how this structure enables
+efficient path optimization through informed sampling and
+iterative refinement.
+
+10
+8
+
+6
+
+5
+4
+
+D. Informed sampling and ellipsotope refinement
+With the adjacency structure established, we employ an
+iterative refinement process that alternates between path
+optimization and reachable set updates, as depicted in Figure 1(c)-(e). This section presents our sampling strategy on
+shared faces and the ellipsotope-based pruning mechanism.
+1) Sampling on shared faces: Rather than sampling uniformly throughout the n-dimensional state space, we exploit
+the structure revealed in III.2 to focus samples on (n − 1)dimensional shared faces Fij between adjacent leaves. For
+a path p = (i0 , i1 , . . . , ik ) through the adjacency graph, we
+generate waypoint samples s = (s1 , . . . , sk−1 ) where each
+sj ∈ Fij ,ij+1 .
+The path cost for a given set of waypoints is:
+c(σs ) = ∥xstart − s1 ∥2 +
+
+k−2
+X
+
+∥sj − sj+1 ∥2 + ∥sk−1 − xgoal ∥2
+
+j=1
+
+(37)
+The convexity of leaf nodes guarantees that straight-line
+segments between consecutive waypoints remain collisionfree, enabling efficient local optimization within this
+reduced-dimensional space.
+2) Ellipsotope-based reachable set refinement: As illustrated in Figure 1(d)-(e), each discovered path with cost cbest
+induces an ellipsotope that bounds all potentially improving
+solutions:
+E = {x ∈ Rn : ∥x − xstart ∥2 + ∥x − xgoal ∥2 ≤ cbest } (38)
+This ellipsotope, shown as the dashed ellipse in Figure 1(d), enables systematic pruning of the search space. The
+intersection E ∩ Zh yields the refined reachable set depicted
+in Figure 1(e), focusing subsequent iterations on regions that
+can potentially improve the solution.
+Algorithm 1 implements the complete HZ-MP pipeline
+illustrated in Figure 1. The algorithm proceeds through three
+main phases: decomposition and adjacency computation
+(lines 1-7, corresponding to Figure 1(a)-(c)), parallel path
+optimization (lines 12-20), and ellipsotope-based refinement
+(lines 17-18, corresponding to Figure 1(d)-(e)).
+The updateReachableSet function (Algorithm 2) constructs
+the ellipsotope based on the current best path cost and
+updates the adjacency relationships to reflect the pruned
+search space. This iterative refinement ensures that computational resources are focused on regions with potential
+for improvement, accelerating convergence to the optimal
+solution.
+By combining hybrid zonotope decomposition, dimensionreduced sampling on shared faces, and ellipsotope-based
+
+2
+
+2
+
+(a) Green dot is start, red dot is 0 (b) Intersection between hybrid
+2
+4
+6
+8
+10
+12
+target, red curve is the current zonotope and constrained zonoshortest path. The red dashed tope (from ellipsotope) to upellipse shows ellipsotope corre- date the feasible space for next
+sponding to the past cost values. motion planning iteration.
+4
+
+6
+
+8
+
+10
+
+12
+
+14
+
+Fig. 4: Illustration of ellipsotope-informed sampling with
+path cost.
+
+pruning, HZ-MP achieves an effective balance between exploration efficiency and solution quality. The parallel processing of multiple paths ensures rapid discovery of initial
+solutions, while the iterative refinement guarantees asymptotic convergence to the global optimum.
+Algorithm 1 operates in three phases. First, it constructs
+the hybrid zonotope decomposition and identifies leaves
+containing start and goal states through membership queries:
+istart = arg
+igoal = arg
+
+min
+i∈{1,...,m}
+
+min
+i∈{1,...,m}
+
+{i : xstart ∈ Zi }
+{i : xgoal ∈ Zi }
+
+The algorithm then enumerates all feasible paths P between
+these leaves using breadth-first search on the adjacency graph
+A.
+The core optimization phase (lines 12-20) explores each
+path p = (i0 , i1 , . . . , ik ) ∈ P in parallel. For each path,
+(l)
+(l)
+the algorithm generates samples Sp = {sj : sj ∼
+Uniform(Fij ,ij+1 ), l = 1, . . . , Ns } on the shared faces between consecutive leaves. These samples define waypoints
+for potential solution paths, and the algorithm solves the
+discrete optimization problem s∗p = arg mins∈Sp c(σs ) to
+find the best configuration for each path. The final phase
+(lines 17-18) updates the reachable ellipsoid based on the
+current best solution and prunes paths that cannot improve
+upon it.
+3) Path Cost Structure: For a path defined by waypoints
+s = (s1 , . . . , sk−1 ) where each sj ∈ Fij ,ij+1 , the total cost
+is computed as:
+c(σs ) = ∥xstart − s1 ∥2 +
+
+k−2
+X
+
+∥sj − sj+1 ∥2 + ∥sk−1 − xgoal ∥2
+
+j=1
+
+(39)
+Since each leaf node is convex, the straight-line segments between consecutive waypoints are guaranteed to be collisionfree, eliminating the need for explicit collision checking
+during path evaluation.
+
+14
+
+16
+
+Algorithm 1 Informed Hybrid Zonotope Motion Planning
+(HZ-MP)
+Input: Start state xstart , goal point xgoal , state space X ,
+obstacles Xobs , max iterations Nmax
+Output: Optimal path solution σ ∗
+1: Zh = FreeSpaceDecomposition(X , Xobs ) ▷ III-B
+2: L = LeafNodes(Zh )
+3: A = AdjacencyMatrix(Zh , L)
+▷ III.2
+4: istart = findContainingLeaf(xstart , L)
+5: igoal = findContainingLeaf(xgoal , L)
+6: P = findAllConnectedPaths(istart , igoal , A)
+7: F = computeSharedFaces(L, A)
+▷ III.4
+8: cbest = ∞
+9: σ ∗ = ∅
+10: iter = 0
+11: Initialize parallel search processes
+12: while iter < Nmax and !converged do
+13:
+for each path p ∈ P in parallel do
+14:
+Sp = generateSamples(F, p)
+15:
+cp , σp = optimizePath(xstart , xgoal , Sp , L)
+16:
+if cp < cbest then
+17:
+updateGlobalBest(cp , σp )
+18:
+E = updateReachableSet(xstart , xgoal , cp )
+19:
+end if
+20:
+end for
+21:
+iter = iter + 1
+22: end while
+23: return σ ∗
+
+4) Sampling Methods: Uniform sampling on (n − 1)dimensional faces requires specialized techniques. The Hitand-Run algorithm [15] generates samples by iteratively
+updating a current point x(t) ∈ Fij . At each iteration, it
+samples a random direction d ∼ N (0, PFij ) where PFij
+projects onto the face tangent space, computes the feasible
+interval Λ = {λ : x(t) + λd ∈ Fij } via linear programming,
+and updates the position as x(t+1) = x(t) + λd where
+λ ∼ Uniform(Λ). For faces with complex geometry, we
+alternatively employ the Billiard Walk method [16], which
+simulates Hamiltonian dynamics with specular reflections at
+boundaries to ensure ergodic exploration.
+E. Ellipsotope-informed path refinement
+Upon discovering a path with cost cbest , the algorithm
+constructs an ellipsotope representing the reachable set:
+E = {x ∈ Rn : ∥x − xstart ∥2 + ∥x − xgoal ∥2 ≤ cbest } (40)
+This can be expressed as an ellipsotope (Definition II.3)
+with p = 2 and I = {{1, . . . , ng }}:
+E = E2 (c, G) = {c + Gξ : ∥ξ∥2 ≤ 1}
+
+(41)
+
+where the center c = 12 (xstart +xgoal ) and the generator matrix
+G ∈ Rn×n is constructed such that the ellipsotope has semixgoal −xstart
+major axis a = cbest /2 along the direction dˆ = ∥xgoal
+−xstart ∥2
+p
+and semi-minor axes b = a2 − ∥d∥2 /4 in the orthogonal
+directions.
+
+Algorithm 2 Update Reachable Set with Ellipsotope
+Input: Start point xstart , goal point xgoal , current best cost
+cbest
+Output: Updated ellipsotope E representing reachable set
+1: d = xgoal
+√ − xstart
+2: ∥d∥ = dT d
+3: dˆ = d/∥d∥
+4: c = (xstart + xgoal )/2
+5: a = p
+cbest /2
+a2 − (∥d∥/2)2
+6: b =
+ˆ a, b)
+7: Q = constructShapeMatrix(d,
+8: E = E2 (c, Q)
+▷ II.3
+9: A = updateLeafAdjacency(L, E)
+10: P = updateConnectedPaths(istart , igoal , A)
+11: return E
+
+The ellipsotope representation precisely bounds all states
+that could potentially improve the current solution while
+enabling efficient intersection operations with constrained
+zonotope leaves. The intersection between an ellipsotope and
+a constrained zonotope can be computed using constrained
+convex generators[17], which provides a systematic method
+for combining their constraints, as illustrated in Figure 4a.
+The algorithm classifies leaf nodes based on their intersection
+with E: Inactive: Zc,i ∩ E = ∅; Partial: ∅ =
+̸ Zc,i ∩ E ̸= Zc,i ;
+Active: Zc,i ⊆ E. The intersection Zc,i ∩ E can be computed
+using the techniques from [18], enabling ra pid pruning of
+infeasible regions. However, to further simplify computation,
+we can also convert ellipsotopes to constrained zonotope
+representation, as illustrated in Figure 4b. This conversion
+allows us to perform all set operations within the zonotopebased framework, maintaining computational efficiency.
+Theoretical Guarantees: The hybrid zonotope framework
+transforms motion planning in obstacle-cluttered environments into convex subproblems, enabling strong theoretical
+guarantees.
+Theorem III.5 (Probabilistic Completeness). Let Zh =
+⟨Gc , Gb , c, Ac , Ab , b⟩ be a hybrid zonotope representation of Xfree . If a feasible solution exists, then
+limNs →∞ P[solution found] = 1 where Ns is the number
+of samples per shared face.
+Proof. Let σ ∗ : [0, 1] → Xfree be a feasible path. Since Zh
+represents Xfree , there exists a sequence of binary factors
+{ξtb,∗ }t∈[0,1] such that:
+σ ∗ (t) = Gc ξtc,∗ + Gb ξtb,∗ + c
+n
+
+for some continuous factors ξtc,∗ ∈ B∞g satisfying Ac ξtc,∗ +
+Ab ξtb,∗ = b.
+Since ξtb,∗ ∈ {−1, 1}nb is discrete and the path is continuous, there exist times 0 = t0 < t1 < . . . < tk = 1
+where ξtb,∗
+̸= ξtb,∗
+. This defines a sequence of leaves I ∗ =
+j
+j+1
+(i0 , . . . , ik ) with transition points s∗j = σ ∗ (tj ) ∈ Fij ,ij+1 .
+By Corollary III.4, each Fij ,ij+1 has positive (n − 1)dimensional measure µn−1 (Fij ,ij+1 ) > 0. For uniform
+
+600
+
+Iteration: 1
+Iteration: 2
+Iteration: 3
+Iteration: 4
+Iteration: 5
+Iteration: 6
+Iteration: 7
+Iteration: 8
+Iteration: 9
+Start
+Goal
+
+sampling on Fij ,ij+1 :
+(l)
+
+P[∥sj − s∗j ∥ < ϵ] ≥
+
+500
+
+µn−1 (Bϵ (s∗j ) ∩ Fij ,ij+1 )
+=: pϵ > 0
+µn−1 (Fij ,ij+1 )
+
+400
+
+Therefore:
+P[
+
+min
+
+l∈{1,...,Ns }
+
+300
+
+(l)
+∥sj −s∗j ∥ < ϵ] = 1−(1−pϵ )Ns → 1 as Ns → ∞
+
+200
+
+Since each leaf Zc,i is convex (being a constrained zonotope), straight-line paths between points within a leaf are
+collision-free. Thus, the algorithm finds a feasible path with
+probability approaching 1.
+Theorem III.6 (Asymptotic Optimality). Under uniform
+sampling on shared faces of Zh : limNs →∞ E[cbest ] = c∗
+where c∗ is the optimal cost.
+Proof. The optimal path σ ∗ with cost c∗ passes through
+transition points s∗ = (s∗1 , . . . , s∗k−1 ). The cost function for
+waypoints s = (s1 , . . . , sk−1 ) is:
+c(σs ) = ∥xstart − s1 ∥2 +
+
+k−2
+X
+
+100
+
+0
+
+-100
+-100
+
+where we define s0 = xstart and sk = xgoal .
+By uniform sampling on each constrained zonotope face
+Fij ,ij+1 and the strong law of large numbers for empirical
+measures on compact sets:
+max
+
+300
+
+400
+
+103.2
+
+min
+
+j∈{1,...,k−1} l∈{1,...,Ns }
+
+(l)
+∥sj − s∗j ∥2 → 0 a.s.
+
+By Lipschitz continuity: |cbest − c∗ | ≤ LδN → 0 a.s.,
+yielding limNs →∞ E[cbest ] = c∗ .
+IV. N UMERICAL EXAMPLES
+We evaluate the proposed hybrid zonotope-based motion
+planning algorithm on challenging scenarios that demonstrate
+its effectiveness in complex environments with narrow passages.
+
+Cost (log scale)
+
+√
+∥sj − s′j ∥2 ≤ 2 k∥s − s′ ∥∞
+
+j=0
+
+δN :=
+
+200
+
+500
+
+600
+
+700
+
+800
+
+Complex maze Fig. 5
+Complex maze 2nd
+NP & EC (×90) Fig. 8
+3D (×25) Fig.7
+Optimal solution cost ∗
+
+∥sj − sj+1 ∥2 + ∥sk−1 − xgoal ∥2
+
+√This function is Lipschitz continuous with constant L =
+2 k since:
+k
+X
+
+100
+
+Fig. 5: Motion planning scenario showing the environment
+with obstacles (gray regions), the start point (green), the goal
+region (red), and the solution path found by our algorithm.
+The map coordinates are given in centimeters.
+
+j=1
+
+|c(σs ) − c(σs′ )| ≤
+
+0
+
+103.1
+
+103
+
+102.9
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+Iteration
+Fig. 6: Convergence analysis across different environments
+showing the stochastic nature of our sampling-based approach. Markers indicate costs at each iteration, while stars
+connected by smooth curves represent iterations where a
+better solution was found and adopted as the new best. The
+non-monotonic behavior between starred points reflects the
+exploration-exploitation trade-off inherent in sampling-based
+methods.
+
+A. Convergence analysis
+We evaluate our algorithm on a planar maze environment
+X = [−100, 800] × [−100, 600] containing 13 obstacles:
+rectangular barriers, polygonal approximations of circles, Ushaped regions, star polygons, and narrow passages (60 cm
+width). The start state is xstart = (400, 250)T and goal state is
+xgoal = (385, 470)T , requiring navigation through the maze
+structure and around multiple obstacles. This environment
+exemplifies the challenges of motion planning in cluttered
+spaces with both narrow passages and complex obstacle
+geometries.
+Figures 5 demonstrate the algorithm’s convergence behavior in a complex 2D environment. The algorithm executed 8
+iterations, with significant solution improvements occurring
+
+at iterations 1, 2, 5, and 8 (marked with green stars). The
+final optimal solution achieved a cost of 698.603. The cost
+function exhibits rapid initial decrease followed by stabilization, validating our theoretical convergence guarantees. The
+hybrid zonotope decomposition enables systematic exploration of multiple homotopy classes, efficiently identifying
+the globally optimal path.
+B. 3D narrow passage navigation
+We evaluate the algorithm in a three-dimensional environment X = [−15, 15]×[0, 15]×[0, 5] ⊂ R3 . The environment
+features a central wall at (0, 0, 2.5)T spanning 13 m vertically
+with a critical narrow passage of 1 m height at z = 4.5
+
+10
+Iteration: 1
+Iteration: 2
+Iteration: 3
+Iteration: 4
+Iteration: 5
+Iteration: 6
+Iteration: 7
+Iteration: 8
+Iteration: 9
+
+9
+8
+7
+
+Y
+
+6
+5
+4
+3
+2
+1
+0
+0
+
+2
+
+4
+
+6
+
+8
+
+10
+
+X
+
+Fig. 7: 3D narrow passage scenario showing the evolution of
+paths and reachable sets across multiple iterations. The blue
+box represents the environment boundaries, the black region
+is an obstacle creating a narrow passage, the green cube is
+the start position, and the red sphere is the goal. Different
+colored paths and ellipsoidal reachable sets correspond to
+different iterations.
+
+m. All walls have thickness 0.3 m, creating a challenging
+topology where the optimal path must navigate through
+aligned openings. The start state is xstart = (−13, 10, 3)T and
+goal state is xgoal = (13, 3, 2)T , requiring navigation through
+the narrow gap, demonstrating the algorithm’s capability in
+constrained 3D spaces.
+Figure 7 illustrates the algorithm’s iterative refinement
+process. The cyan path (iteration 1) takes a conservative
+route with a large reachable ellipsoid, the magenta path
+(iteration 2) improves with a reduced reachable set, and
+the red path (iteration 4) identifies the optimal trajectory
+through the narrow passage. The progressively shrinking
+ellipsoidal reachable sets demonstrate the effectiveness of
+our informed sampling strategy, concentrating computational
+effort in promising regions while maintaining completeness
+guarantees.
+C. Narrow passages and enclosure example
+We further evaluate our algorithm on a planar enclosure
+environment X = [0, 10] × [0, 10] ⊂ R2 featuring a rectangular enclosure with interior dimensions approximately
+6 × 4 units centered at (5, 4)T . The enclosure walls have
+thickness 0.3 units and contain a critical narrow opening
+of width 0.8 units on the left wall at height y = 4. The
+start state xstart = (3, 3)T is positioned outside the enclosure,
+while the goal state xgoal = (7, 5)T lies within the enclosed
+region, necessitating passage through the narrow opening.
+This configuration exemplifies the narrow passage problem
+
+Fig. 8: Narrow passage and enclosure scenario showing the
+hybrid zonotope decomposition. The numbered regions (0, 1,
+2) represent different leaf nodes, with region 012 indicating
+the critical shared face at the narrow passage. The algorithm
+successfully identifies and navigates through this constrained
+opening.
+
+where the measure of the feasible region connecting start
+to goal is vanishingly small relative to the total free space
+volume.
+Figure 8 demonstrates the algorithm’s capability in extremely constrained environments. The hybrid zonotope decomposition explicitly captures the narrow passage as a
+shared face between leaf nodes, ensuring high sampling
+density precisely where needed. By sampling on (n − 1)dimensional shared faces rather than n-dimensional volumes, our approach maintains computational efficiency while
+guaranteeing discovery of feasible paths through narrow
+openings. The explicit topological representation ensures
+these critical regions are systematically explored, addressing
+a fundamental challenge in sampling-based motion planning.
+These results confirm that the hybrid zonotope framework
+effectively addresses the narrow passage problem—a fundamental challenge in motion planning—through dimension
+reduction and topology-aware sampling.
+V. C ONCLUSION
+We presented a motion planning algorithm that leverages
+hybrid zonotope decomposition to transform complex planning problems into sequences of convex subproblems. The
+key innovation—sampling on (n − 1)-dimensional shared
+faces rather than n-dimensional volumes—directly addresses
+the narrow passage problem while maintaining theoretical
+guarantees of probabilistic completeness and asymptotic optimality.
+Our approach achieves local linear convergence within
+convex regions and demonstrates rapid global convergence
+through ellipsotope-informed refinement. Experimental results confirm the algorithm’s effectiveness across diverse
+environments, from 2D mazes to 3D narrow passages. While
+the initial decomposition incurs computational cost, this
+
+amortizes over multiple queries in static environments.
+Future work includes extending the framework to dynamic
+environments and kinodynamic constraints. By unifying geometric decomposition with sampling-based planning, this
+work provides a principled solution to motion planning in
+complex, constrained spaces.
+R EFERENCES
+[1] D. Ioan, I. Prodan, S. Olaru, F. Stoican, and S. I. Niculescu, “Mixedinteger programming in motion planning,” Annual Reviews in Control,
+vol. 51, pp. 65–87, 2021.
+[2] T. J. Bird, H. C. Pangborn, N. Jain, and J. P. Koeln, “Hybrid zonotopes:
+A new set representation for reachability analysis of mixed logical
+dynamical systems,” Automatica, vol. 154, p. 111107, 2023.
+[3] J. A. Robbins, S. B. Brennan, and H. C. Pangborn, “Efficient solution
+of mixed-integer MPC problems for obstacle avoidance using hybrid
+zonotopes,” in Proc. 63rd IEEE Conf. on Decision and Control (CDC),
+2024, pp. 8199–8206.
+[4] S. Shoja, D. Arnström, and D. Axehill, “Overall complexity certification of a standard branch and bound method for mixed-integer
+quadratic programming,” in 2022 American Control Conference
+(ACC). IEEE, 2022, pp. 4957–4964.
+[5] L. E. Kavraki, P. Švestka, J.-C. Latombe, and M. H. Overmars, “Probabilistic roadmaps for path planning in high-dimensional configuration
+spaces,” IEEE Transactions on Robotics and Automation, vol. 12,
+no. 4, pp. 566–580, 1996.
+[6] S. Karaman and E. Frazzoli, “Sampling-based algorithms for optimal
+motion planning,” in Robotics: Science and Systems, 2011.
+[7] J. D. Gammell, S. S. Srinivasa, and T. D. Barfoot, “Informed rrt*:
+Optimal sampling-based path planning focused via direct sampling
+of an admissible ellipsoidal heuristic,” in IEEE/RSJ International
+Conference on Intelligent Robots and Systems. IEEE, 2014, pp. 2997–
+3004.
+[8] M. P. Strub and J. D. Gammell, “Adaptively informed trees (AIT*)
+and effort informed trees (EIT*): Asymmetric bidirectional samplingbased path planning,” Int. Journal of Robotics Research, vol. 41, no. 4,
+pp. 390–417, 2022.
+[9] S. Kousik, A. Dai, and G. X. Gao, “Ellipsotopes: Uniting ellipsoids
+and zonotopes for reachability analysis and fault detection,” IEEE
+Transactions on Automatic Control, vol. 68, no. 6, pp. 3440–3452,
+2023.
+[10] P. Hachenberger, L. Kettner, and K. Mehlhorn, “Boolean operations
+on 3D selective Nef complexes: Data structure, algorithms, optimized
+implementation and experiments,” Computational Geometry, vol. 38,
+no. 1-2, pp. 64–99, 2007.
+[11] The CGAL Project, CGAL User and Reference Manual, 6.0.1 ed.
+CGAL Editorial Board, 2024. [Online]. Available: https://doc.cgal.
+org/6.0.1/Manual/packages.html
+[12] J. A. Robbins, J. A. Siefert, S. Brennan, and H. C. Pangborn, “Mixedinteger mpc-based motion planning using hybrid zonotopes with tight
+relaxations,” arXiv preprint arXiv:2411.01286, 2024.
+[13] J. Koeln, T. J. Bird, J. Siefert, J. Ruths, H. C. Pangborn, and N. Jain,
+“zonolab: A matlab toolbox for set-based control systems analysis using hybrid zonotopes,” in 2024 American Control Conference (ACC).
+IEEE, 2024, pp. 2513–2520.
+[14] J. K. Scott, D. M. Raimondo, G. R. Marseglia, and R. D. Braatz,
+“Constrained zonotopes: A new tool for set-based estimation and fault
+detection,” Automatica, vol. 69, pp. 126–136, 2016.
+[15] R. L. Smith, “Efficient monte carlo procedures for generating points
+uniformly distributed over bounded regions,” Operations Research,
+vol. 32, no. 6, pp. 1296–1308, 1984.
+[16] B. T. Polyak and E. N. Gryazina, “Billiard walk - a new sampling
+algorithm for control and optimization,” in 19th IFAC World Congress,
+2014, pp. 6123–6128.
+[17] D. Silvestre, “Constrained convex generators: A tool suitable for setbased estimation with range and bearing measurements,” IEEE Control
+Systems Letters, vol. 6, pp. 1610–1615, 2022.
+[18] A. Kulmburg, I. Brkan, and M. Althoff, “Search-based and stochastic
+solutions to the zonotope and ellipsotope containment problems,” in
+2024 European Control Conference (ECC), 2024, pp. 1057–1064.
+
+
