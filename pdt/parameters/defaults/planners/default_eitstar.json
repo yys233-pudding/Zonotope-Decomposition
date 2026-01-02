@@ -1,0 +1,24 @@
+{
+    "planner": {
+        "defaultEITstar": {
+            "type": "EITstar",
+            "isAnytime": true,
+            "report": {
+                "color": "pdtgreen",
+                "name": "EIT*"
+            },
+            "options": {
+                "batchSize": 100,
+                "radiusFactor": 1.001,
+                "repairFactor": 1.2,
+                "useKNearest": true,
+                "enablePruning": true,
+                "trackApproximateSolutions": false,
+                "repairReverseSearchTreeUponCollisionDetection": false,
+                "collisionDetectionOnReverseSearch": true,
+                "numInitialCollisionChecks": 1,
+                "resetSuboptimalityFactorOnEveryApproximation": false
+            }
+        }
+    }
+}

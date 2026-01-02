@@ -1,0 +1,9 @@
+[submodule "thirdparty/json"]
+	path = thirdparty/json
+	url = git@github.com:nlohmann/json.git
+[submodule "thirdparty/csv"]
+	path = thirdparty/csv
+	url = git@github.com:AriaFallah/csv-parser.git
+[submodule "thirdparty/doctest"]
+	path = thirdparty/doctest
+	url = git@github.com:onqtam/doctest.git

@@ -1,0 +1,19 @@
+{
+    "experiment": {
+        "executable": "benchmark",
+        "planners": [
+            "defaultRRTConnect",
+            "defaultRRTstar",
+            "defaultBITstar",
+            "defaultABITstar",
+            "defaultEITstar"
+        ],
+        "context": "defaultWallGap2D",
+        "numRuns": 100,
+        "logFrequency": 10000,
+        "loadDefaultContextConfig": true,
+        "loadDefaultObjectiveConfig": true,
+        "loadDefaultPlannerConfig": true,
+        "loadDefaultReportConfig": true
+    }
+}

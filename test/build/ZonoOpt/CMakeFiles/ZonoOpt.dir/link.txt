@@ -1,0 +1,2 @@
+/usr/bin/ar qc libZonoOpt.a CMakeFiles/ZonoOpt.dir/src/PolymorphicFunctions.cpp.o CMakeFiles/ZonoOpt.dir/src/ADMM.cpp.o CMakeFiles/ZonoOpt.dir/src/CholeskyUtilities.cpp.o CMakeFiles/ZonoOpt.dir/src/HybZono.cpp.o CMakeFiles/ZonoOpt.dir/src/ConZono.cpp.o CMakeFiles/ZonoOpt.dir/src/Zono.cpp.o CMakeFiles/ZonoOpt.dir/src/Point.cpp.o CMakeFiles/ZonoOpt.dir/src/EmptySet.cpp.o CMakeFiles/ZonoOpt.dir/src/Intervals.cpp.o CMakeFiles/ZonoOpt.dir/src/MI_Solver.cpp.o
+/usr/bin/ranlib libZonoOpt.a

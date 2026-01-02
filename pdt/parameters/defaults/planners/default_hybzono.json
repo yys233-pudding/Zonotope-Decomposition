@@ -1,0 +1,16 @@
+{
+    "planner": {
+        "defaultHybZono": {
+            "type": "HybZono",
+            "isAnytime": false,
+            "report": {
+                "color": "pdtblue",
+                "name": "HybZono"
+            },
+            "options": {
+                "horizon": 10.0,
+                "dt": 0.1
+            }
+        }
+    }
+}

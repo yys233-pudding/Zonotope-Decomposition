@@ -1,0 +1,15 @@
+{
+    "planner": {
+        "defaultPRMstar": {
+            "type": "PRMstar",
+            "isAnytime": true,
+            "report": {
+                "color": "pdtyellow",
+                "name": "PRM*"
+            },
+            "options": {
+                "none": true
+            }
+        }
+    }
+}
